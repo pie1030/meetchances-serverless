@@ -1,9 +1,8 @@
 # meetchances-serverless
 
-MeetChances 的 Serverless 后端服务仓库，独立于 `meetchances-platform`。
+MeetChances 的 Serverless 后端服务仓库。
 
-这里承载相对独立、适合部署到 Serverless 的轻量后端能力，例如官网接口、飞书机器人、飞书多维表格读写、AI 相关接口等。每类能力作为 `app/api/` 下的一个模块存在，互不耦合。
-
+这里承载相对独立、适合部署到 Serverless 的轻量后端能力，例如官网接口、飞书机器人、飞书多维表格读写、AI 相关接口等。
 现有模块：
 
 | 模块 | 接口 | 说明 |
@@ -13,10 +12,9 @@ MeetChances 的 Serverless 后端服务仓库，独立于 `meetchances-platform`
 
 ## 环境要求
 
-- Python 3.12（已在 `.python-version` 中固定）
+- Python 3.12
 - [uv](https://docs.astral.sh/uv/)（用于管理虚拟环境和依赖）
 
-无需手动创建虚拟环境，`uv` 会按 `.python-version` 自动准备 `.venv`。
 
 ## 安装 / 同步依赖
 
@@ -24,7 +22,7 @@ MeetChances 的 Serverless 后端服务仓库，独立于 `meetchances-platform`
 uv sync
 ```
 
-该命令会创建 `.venv` 并按 `uv.lock` 安装全部依赖（含开发依赖）。仅需运行时依赖时：
+该命令会创建 `.venv` 并按 `uv.lock` 安装全部依赖。仅需运行时依赖时：
 
 ```bash
 uv sync --no-dev
