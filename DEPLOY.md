@@ -12,10 +12,10 @@
 ./verify_package.sh   # 在 linux/amd64 容器里跑一遍（需 Docker）
 ```
 
-`verify_package.sh` 是上线前唯一能真正证明代码包可用的检查：它在 Linux 容器里
-只用「代码包 + 环境变量」启动，没有 `.venv` 也没有 `.env`，并刻意用非 8000 端口
-——若 `run.sh` 没读平台注入的 `_BYTEFAAS_RUNTIME_PORT`，探活就会失败。
-有 `.env` 时会额外真写一条记录（跑完需手动删除），没有也能验证启动与 CORS。
+`verify_package.sh` 在 Linux 容器里只用「代码包 + 环境变量」启动，没有 `.venv`
+也没有 `.env`，并刻意用非 8000 端口——若 `run.sh` 没读平台注入的
+`_BYTEFAAS_RUNTIME_PORT`，探活就会失败。有 `.env` 时会额外真写一条记录（跑完需
+手动删除），没有也能验证启动与 CORS。
 
 包内结构对齐官方模版 `vefaas-native-python3.12-default`：
 
@@ -37,12 +37,12 @@ MODE=docker ./package.sh  # 在 linux/amd64 容器内真实安装（需 Docker�
 ```
 
 `cross` 模式用 `uv pip install --python-platform x86_64-manylinux2014 --only-binary :all:`，
-保证绝不在本机编译 —— 本机编译必然产出 arm64 Mach-O，函数运行时会直接崩。
-若某依赖只提供源码分发导致 cross 失败，改用 `MODE=docker`。
+保证绝不在本机编译——本机编译会产出 arm64 Mach-O，函数运行时直接崩。若某依赖只
+提供源码分发导致 cross 失败，改用 `MODE=docker`。
 
-打包最后一步会**正面断言**每个扩展模块都是目标架构的 ELF（当前 7 个）。
-只黑名单 `*darwin*.so` 是不够的：ARM Linux 的 `.so` 文件名里同样带 `linux`，
-会蒙混过关并在 x86_64 运行时崩溃。
+打包最后一步会正面断言每个扩展模块都是目标架构的 ELF（当前 7 个）。只黑名单
+`*darwin*.so` 不够：ARM Linux 的 `.so` 文件名里同样带 `linux`，会蒙混过关并在
+x86_64 运行时崩溃。
 
 ## 二、控制台配置
 
@@ -74,8 +74,10 @@ MODE=docker ./package.sh  # 在 linux/amd64 容器内真实安装（需 Docker�
 
 ## 三、部署后验证
 
+当前网关地址：`https://s55opee5micflbukgsh18.apigateway-cn-beijing.volceapi.com`
+
 ```bash
-BASE=https://<你的网关地址>
+BASE=https://s55opee5micflbukgsh18.apigateway-cn-beijing.volceapi.com
 
 curl $BASE/health
 # {"status":"ok"}
@@ -93,11 +95,30 @@ curl -X POST $BASE/contact \
   -H "Origin: https://human-intelligence.cn" \
   -d '{"name":"验证-勿删","job_title":"测试","company":"测试","contact":"t@example.com"}'
 # {"ok":true,"record_id":"rec...","source":"智能知识官网"}
+
+# 必填校验：智能知识官网缺 job_title 应返回 422
+curl -X POST $BASE/contact \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://human-intelligence.cn" \
+  -d '{"name":"验证","company":"测试","contact":"t@example.com"}'
+# {"detail":"缺少必填项：职位"}
+
+# 未授权 Origin 应无 access-control-allow-origin 头
+curl -sD- -o /dev/null -X OPTIONS $BASE/contact \
+  -H "Origin: https://evil.example.com" \
+  -H "Access-Control-Request-Method: POST" | grep -i access-control-allow-origin
 ```
 
-## 三、切换官网前端
+验证完记得删掉表格里的「验证-勿删」记录。
 
-新服务与旧服务的 `/contact` 请求与响应格式完全一致，前端只需把 BASE 换成新网关
-地址，无需改字段。两个官网调同一个 URL，来源由后端读 `Origin` 判定。
+## 四、切换官网前端
 
-上线顺序建议：先部署新函数并用上面的 curl 验证，再改前端地址，最后下线旧函数。
+`/contact` 的请求与响应格式和旧服务完全一致，前端只需把 BASE 换成网关地址，字段
+不用改。两个官网调同一个 URL，来源由后端读 `Origin` 判定。
+
+上线顺序：先部署函数并用上面的 curl 验证，再改前端地址，最后下线旧函数。
+
+测试环境（`human-intelligence.xpertiise.com`）要验证的是本地测不到的部分：
+`Origin` 判定成「智能知识官网（测试）」，以及该站真正的必填规则（姓名、职位、
+联系方式、公司）。本地 localhost 会判定成「未知来源」，只校验姓名和联系方式，
+所以必填规则在本地测不出来。

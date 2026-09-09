@@ -1,8 +1,7 @@
-"""Shared fixtures.
+"""公共 fixture。
 
-The Feishu client is replaced with a stub via dependency_overrides, so the
-suite makes no network calls, needs no credentials, and never writes to the
-shared table. Live checks against the real table live in test_feishu_live.py.
+飞书客户端通过 dependency_overrides 换成 stub，所以整个套件不发网络请求、不需要
+凭证、不会写共享表格。真连表格的检查在 test_feishu_live.py。
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.api.website.router import get_feishu_client
 from app.main import app
 
-# A complete, valid submission for each site.
+# 每个站点一份完整合法的提交内容。
 FULL_HI = {
     "name": "张三",
     "job_title": "技术总监",
@@ -31,14 +30,14 @@ FULL_MC = {
     "requirement": "招聘合作",
 }
 
-HI = "http://human-intelligence.cn"  # live site serves HTTP without redirecting
+HI = "http://human-intelligence.cn"  # 线上不跳转 https
 HI_STAGING = "https://human-intelligence.xpertiise.com"
 MC = "https://meetchances.com"
 MC_STAGING = "https://testwebsite.meetchances.com"
 
 
 class StubFeishuClient:
-    """Records the fields it was asked to write; can be told to raise instead."""
+    """记录被要求写入的字段，也可以设成抛异常。"""
 
     def __init__(self) -> None:
         self.table_id = "tbl_stub"

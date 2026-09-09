@@ -1,13 +1,12 @@
-"""Live checks against the real Feishu table. Skipped unless opted in.
+"""真连飞书表格的检查，默认跳过。
 
-The rest of the suite stubs Feishu out, so it cannot catch the failure that
-actually breaks this feature in production: the code writing a column name the
-table does not have. That only shows up against the real table.
+其余测试都把飞书 stub 掉了，抓不到线上真正会挂的那类问题：代码写了一个表格里
+没有的列名。这只有对着真实表格才能发现。
 
     RUN_LIVE_FEISHU=1 uv run pytest tests/test_feishu_live.py -v
 
-Reads credentials from .env / the environment. Read-only unless you also set
-FEISHU_LIVE_WRITE=1, which appends one record you then delete by hand.
+凭证从 .env 或环境变量读。只读，除非同时设 FEISHU_LIVE_WRITE=1，那会写一条需要
+你手动删掉的记录。
 """
 
 from __future__ import annotations
@@ -27,8 +26,7 @@ pytestmark = [
     pytest.mark.anyio,
 ]
 
-# Columns this service writes. Each must exist in the table, or create_record
-# fails with a field-not-found error at runtime.
+# 本服务会写的列。每一列都必须存在，否则写入时报字段不存在。
 WRITTEN_COLUMNS = (
     service.FIELD_NAME,
     service.FIELD_JOB_TITLE,
@@ -39,12 +37,12 @@ WRITTEN_COLUMNS = (
     service.FIELD_SUBMITTED_AT,
 )
 
-# Bitable has no auto-number field type, so there is no 「编号」 column and the
-# service must not invent one: writing an unknown column fails the whole record.
+# 飞书没有自动编号字段类型，表格里也不该再有「编号」列；写一个未知列会让整条
+# 记录失败。
 FORBIDDEN_COLUMNS = ("编号",)
 
-# 「提交时间」 must stay a writable DateTime. If it were switched to 创建时间
-# (CreatedTime), it would become read-only and every write would be rejected.
+# 「提交时间」必须保持可写的 DateTime。改成「创建时间」就变只读，每次写入都会
+# 被飞书拒绝。
 WRITABLE_DATETIME_COLUMNS = {service.FIELD_SUBMITTED_AT: {"DateTime"}}
 
 
@@ -64,7 +62,7 @@ def client() -> FeishuBitableClient:
 async def test_tenant_access_token_obtainable(client: FeishuBitableClient) -> None:
     token = await client.get_tenant_access_token()
 
-    # Assert on shape only. Never print or log the token itself.
+    # 只断言形状，不打印令牌本身。
     assert token
     assert isinstance(token, str)
 
@@ -77,7 +75,7 @@ async def test_every_written_column_exists(client: FeishuBitableClient) -> None:
 
 
 async def test_submitted_at_stays_writable(client: FeishuBitableClient) -> None:
-    """「提交时间」须为可写 DateTime —— 本服务负责写入它。"""
+    """「提交时间」须为可写的 DateTime。"""
     actual = {f["field_name"]: f["ui_type"] for f in await client.list_fields()}
 
     for name, allowed in WRITABLE_DATETIME_COLUMNS.items():
@@ -89,7 +87,7 @@ async def test_submitted_at_stays_writable(client: FeishuBitableClient) -> None:
 
 
 async def test_no_unwritable_columns_expected(client: FeishuBitableClient) -> None:
-    """表格不该再有「编号」列；若被重新加回来，需要重新决定谁来填。"""
+    """「编号」若被加回来需要重新决定谁填，别让它静默留空。"""
     actual = {f["field_name"] for f in await client.list_fields()}
 
     resurrected = [name for name in FORBIDDEN_COLUMNS if name in actual]

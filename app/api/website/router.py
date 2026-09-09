@@ -1,8 +1,7 @@
-"""Routes for the official websites.
+"""官网相关路由。
 
-The contact endpoint sits at /contact rather than under a /website prefix
-because both live sites already POST to that absolute URL. Keeping the path
-means this service can replace the old one without a frontend release.
+接口路径是 /contact 而不是挂在 /website 前缀下：两个线上站点已经在往这个绝对
+路径提交，保持不变才能直接替换旧服务，前端不用改。
 """
 
 from __future__ import annotations
@@ -25,16 +24,15 @@ router = APIRouter(tags=["website"])
 
 @lru_cache(maxsize=1)
 def _client() -> FeishuBitableClient:
-    """Build the client once so its tenant_access_token cache is reused."""
+    """只建一次，复用它缓存的 tenant_access_token。"""
     return FeishuBitableClient.from_env()
 
 
 def get_feishu_client() -> FeishuBitableClient:
-    """Provide the Bitable client, or fail this request only.
+    """按请求获取客户端，配置缺失时只让这个请求失败。
 
-    Resolved per request rather than at startup: this repo hosts several
-    unrelated Serverless modules, and missing Feishu credentials should not stop
-    the whole app (or /health) from coming up.
+    不在启动时建：这个仓库还会放其它无关的 Serverless 模块，飞书凭证缺失不该
+    让整个应用（包括 /health）起不来。
     """
     try:
         return _client()
@@ -61,11 +59,11 @@ async def create_contact(
     try:
         record_id = await client.create_record(fields)
     except FeishuAPIError as exc:
-        # Log the Feishu error code, but do not surface it to the caller.
+        # 飞书返回的错误码记进日志，不返回给调用方。
         logger.error("写入飞书失败：%s", exc)
         raise HTTPException(status_code=502, detail="提交失败，请稍后重试") from exc
     except httpx.HTTPError as exc:
-        # Timeouts and connection failures, which would otherwise surface as 500.
+        # 超时和连接失败，否则会以 500 暴露堆栈。
         logger.error("请求飞书网络异常：%r", exc)
         raise HTTPException(status_code=504, detail="提交超时，请稍后重试") from exc
 
