@@ -6,10 +6,28 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
+    # Async HTTP client used to call the Feishu open API. Pinned to the same
+    # range as meetchances-platform so both repos behave identically; the socks
+    # extra is what lets it honour a SOCKS proxy on the office network.
+    "httpx[socks]>=0.28.1,<0.29.0",
+    # Loads .env for local development.
+    "python-dotenv>=1.2.3",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.12.0",
     "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+    # starlette's TestClient now prefers the httpx2 package and deprecates
+    # plain httpx. We stay on httpx deliberately: it is what the Feishu client
+    # is proven against and what meetchances-platform pins. Revisit as a
+    # separate decision, not as a side effect of a migration.
+    "default::starlette.exceptions.StarletteDeprecationWarning",
+    # anyio's own internal alias warning, triggered from inside starlette.
+    "default:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
 ]

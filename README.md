@@ -4,7 +4,12 @@ MeetChances 的 Serverless 后端服务仓库，独立于 `meetchances-platform`
 
 这里承载相对独立、适合部署到 Serverless 的轻量后端能力，例如官网接口、飞书机器人、飞书多维表格读写、AI 相关接口等。每类能力作为 `app/api/` 下的一个模块存在，互不耦合。
 
-当前处于第一阶段：基础 FastAPI 骨架 + 健康检查接口。
+现有模块：
+
+| 模块 | 接口 | 说明 |
+| --- | --- | --- |
+| `health` | `GET /health` | 存活探针 |
+| `website` | `POST /contact` | 两个官网的「联系我们」表单 → 飞书多维表格 |
 
 ## 环境要求
 
@@ -25,6 +30,19 @@ uv sync
 uv sync --no-dev
 ```
 
+## 配置环境变量
+
+`POST /contact` 需要飞书凭证。本地开发：
+
+```bash
+cp .env.example .env   # 然后填入真实值
+```
+
+`.env` 已被 git 忽略，**切勿提交**。部署环境不要上传 `.env`，改在函数控制台注入
+环境变量（见 [DEPLOY.md](DEPLOY.md)）。
+
+未配置时 `/health` 照常可用，`POST /contact` 返回 `503 服务暂不可用`。
+
 ## 启动本地服务
 
 ```bash
@@ -32,6 +50,14 @@ uv run uvicorn app.main:app --reload
 ```
 
 默认监听 `http://127.0.0.1:8000`，`--reload` 会在代码变更后自动重启。
+
+也可以用部署入口启动，行为与函数运行时一致：
+
+```bash
+./run.sh                # 8000
+./run.sh --port 9000
+./run.sh --reload
+```
 
 ## 访问 /health
 
@@ -47,28 +73,143 @@ curl http://127.0.0.1:8000/health
 
 交互式接口文档：`http://127.0.0.1:8000/docs`
 
+## POST /contact
+
+两个官网的「联系我们」表单都提交到这一个接口。**来源网站由后端读 `Origin`
+判定，不接受前端传值**，所以两站共用一个 URL，前端也无法伪造来源。
+
+| 字段 | 类型 | 智能知识官网 | 一面千识官网 | 上限 |
+| --- | --- | --- | --- | --- |
+| `name` | string | 必填 | 必填 | 100 |
+| `job_title` | string | 必填 | 无此字段 | 100 |
+| `company` | string | 必填 | 必填 | 200 |
+| `contact` | string | 必填 | 必填 | 200 |
+| `requirement` | string | 可选 | 必填 | 5000 |
+
+首尾空白会被去掉，纯空白等同未填。
+
+响应：
+
+| 状态码 | body | 含义 |
+| --- | --- | --- |
+| `200` | `{"ok":true,"record_id":"rec...","source":"..."}` | 写入成功 |
+| `422` | `{"detail":"缺少必填项：职位、公司"}` | `detail` 是中文，可直接展示 |
+| `502` | `{"detail":"提交失败，请稍后重试"}` | 飞书接口异常 |
+| `503` | `{"detail":"服务暂不可用"}` | 飞书环境变量未配置 |
+| `504` | `{"detail":"提交超时，请稍后重试"}` | 网络超时 |
+
+超长字段返回的是 Pydantic 默认的 422，`detail` 为**数组**而非字符串，前端直接
+渲染会显示 `[object Object]`。前端应先判断类型，例如：
+
+```js
+const msg = typeof data.detail === 'string' ? data.detail : '提交失败，请稍后重试'
+```
+
+### 调用示例
+
+```js
+const BASE = 'https://<网关地址>'
+
+const resp = await fetch(`${BASE}/contact`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  // 智能知识官网多传 job_title；一面千识官网不传这个字段
+  body: JSON.stringify({ name, job_title, company, contact, requirement }),
+})
+
+const data = await resp.json()
+if (!resp.ok) {
+  showError(typeof data.detail === 'string' ? data.detail : '提交失败，请稍后重试')
+}
+```
+
+### 来源判定与 CORS
+
+| Origin | 写入「来源网站」列 |
+| --- | --- |
+| `human-intelligence.cn`、`www.` 前缀（http + https） | 智能知识官网 |
+| `human-intelligence.xpertiise.com`（仅 https） | 智能知识官网（测试） |
+| `meetchances.com`、`www.` 前缀（http + https） | 一面千识官网 |
+| `testwebsite.meetchances.com`（仅 https） | 一面千识官网（测试） |
+| `localhost:5173`、`localhost:3000` | 未知来源（放行跨域但不伪装成真实线索） |
+| 其他 / 不带 Origin | 未知来源（并打 warning 日志） |
+
+测试环境写入独立取值，便于在表格里筛掉测试数据；必填规则与对应正式站共用同一个
+元组对象，不会漂移。
+
+CORS 白名单与来源映射都从 [app/api/website/sites.py](app/api/website/sites.py) 的
+`SITES` 派生，**加域名只改这一处**。旧实现里两份清单手工维护，只加白名单会让请求
+通过但记成「未知来源」，只加来源映射则浏览器根本发不出请求。
+
+不使用 `allow_origins=["*"]`：本接口写入共享表格，白名单是必要的。
+
+### 飞书字段映射
+
+| 请求字段 | 表格列 | 说明 |
+| --- | --- | --- |
+| `name` | 姓名 | |
+| `job_title` | 职位 | 一面千识官网不传，留空即不写该列 |
+| `company` | 公司 | |
+| `contact` | 联系方式 | |
+| `requirement` | 需求说明 | |
+| —（后端判定） | 来源网站 | 由 `Origin` 推出 |
+| — | 编号 | **飞书自动生成**，后端不写 |
+| — | 提交时间 | **飞书自动生成**（创建时间），后端不写 |
+
+可选项为空时省略该键，不写空字符串，避免表格里留下空值。
+
 ## 运行测试
 
 ```bash
 uv run pytest
 ```
 
+默认全程 stub 掉飞书客户端：不发网络请求、不需要凭证、不写共享表格。
+
+对着真实表格核对字段（只读）：
+
+```bash
+RUN_LIVE_FEISHU=1 uv run pytest tests/test_feishu_live.py -v
+```
+
+真写入一条（跑完请手动删除）：
+
+```bash
+RUN_LIVE_FEISHU=1 FEISHU_LIVE_WRITE=1 uv run pytest tests/test_feishu_live.py -v
+```
+
+## 部署
+
+见 [DEPLOY.md](DEPLOY.md)。
+
 ## 目录结构
 
 ```
 meetchances-serverless/
 ├── app/
-│   ├── main.py                  # 创建 FastAPI app，注册聚合路由
+│   ├── main.py                  # 创建 FastAPI app，注册聚合路由与 CORS
+│   ├── feishu.py                # 飞书多维表格客户端（跨模块共享的基础设施）
 │   └── api/
 │       ├── router.py            # 聚合路由：所有业务模块在此挂载
 │       ├── health/              # 健康检查模块
 │       │   ├── router.py        # GET /health
 │       │   ├── service.py       # 健康状态逻辑
 │       │   └── schemas.py       # 响应模型
-│       └── website/             # 官网模块（预留，暂无接口）
-│           └── router.py
+│       └── website/             # 官网模块
+│           ├── router.py        # POST /contact
+│           ├── service.py       # 来源判定、必填校验、字段映射
+│           ├── schemas.py       # 请求/响应模型
+│           └── sites.py         # 官网注册表：CORS 白名单与来源映射的唯一来源
 ├── tests/
-│   └── test_health.py
+│   ├── conftest.py              # 共享 fixture，stub 掉飞书客户端
+│   ├── test_health.py
+│   ├── test_contact.py          # POST /contact 的校验、映射、错误处理
+│   ├── test_cors.py             # 跨域与站点注册表守卫
+│   └── test_feishu_live.py      # 真连飞书的字段自检（默认跳过）
+├── run.sh                       # 火山引擎入口，兼作本地启动
+├── package.sh                   # 打包函数代码包
+├── DEPLOY.md                    # 部署说明
+├── .env.example                 # 需要哪些环境变量
 ├── pyproject.toml               # 项目元信息与依赖声明
 ├── uv.lock                      # 依赖锁定文件（需提交）
 ├── .python-version              # 固定 Python 版本
@@ -79,7 +220,8 @@ meetchances-serverless/
 
 | 位置 | 职责 |
 | --- | --- |
-| `app/main.py` | 只负责创建 app 和注册 `api_router`，不包含任何业务路由 |
+| `app/main.py` | 只负责创建 app、注册 `api_router` 与 CORS，不包含任何业务路由 |
+| `app/feishu.py` | 跨模块共享的飞书客户端；表格专属的字段名归各模块自己管 |
 | `app/api/router.py` | 唯一的路由注册点，新增模块只需在此 `include_router` 一行 |
 | `<module>/router.py` | HTTP 层：处理路径、入参校验、响应模型，不写业务逻辑 |
 | `<module>/service.py` | 业务层：纯逻辑，不依赖 FastAPI，便于单测和跨模块复用 |
@@ -94,6 +236,9 @@ meetchances-serverless/
 3. 在 `app/api/router.py` 中挂载它
 
 无需修改 `app/main.py`。
+
+新模块一律带路径前缀。`website` 模块的 `/contact` 是唯一例外 —— 两个官网线上已经
+在往这个绝对路径提交，保留它才能不改前端直接替换旧服务。
 
 ## 约定
 
