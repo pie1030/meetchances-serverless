@@ -83,7 +83,7 @@ def build_lead_card(
     submitted_at: datetime,
     record_id: str,
 ) -> dict[str, Any]:
-    """渲染新消息卡片。
+    """渲染新线索的群通知卡片。
 
     values 是 service.normalize 之后的表单值：未填写的项为 None，直接省略该行，
     不显示空行。

@@ -6,28 +6,29 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
-    # Async HTTP client used to call the Feishu open API. Pinned to the same
-    # range as meetchances-platform so both repos behave identically; the socks
-    # extra is what lets it honour a SOCKS proxy on the office network.
+    # 调飞书开放平台用的异步 HTTP 客户端。版本范围与 meetchances-platform 对齐，
+    # 保证两个仓库行为一致；socks extra 是为了走办公网的 SOCKS 代理。
     "httpx[socks]>=0.28.1,<0.29.0",
-    # Loads .env for local development.
+    # 本地开发读 .env。
     "python-dotenv>=1.2.3",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    # tests/test_feishu_live.py 里的异步用例要靠 anyio 的 pytest 插件收集。
+    # 它同时是 starlette 的传递依赖，但传递依赖随时可能变，这里显式声明。
+    "anyio>=4.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = [
     "error",
-    # starlette's TestClient now prefers the httpx2 package and deprecates
-    # plain httpx. We stay on httpx deliberately: it is what the Feishu client
-    # is proven against and what meetchances-platform pins. Revisit as a
-    # separate decision, not as a side effect of a migration.
+    # starlette 的 TestClient 现在推荐 httpx2、弃用普通 httpx。这里刻意留在 httpx：
+    # 飞书客户端是对着它验过的，meetchances-platform 也锁的是它。要不要迁移是一个
+    # 独立决定，不该作为别的改动的副作用发生。
     "default::starlette.exceptions.StarletteDeprecationWarning",
-    # anyio's own internal alias warning, triggered from inside starlette.
+    # anyio 自己的别名弃用警告，从 starlette 内部触发，不是本仓库代码的问题。
     "default:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
 ]
