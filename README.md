@@ -5,10 +5,10 @@ MeetChances 的 Serverless 后端服务仓库。
 这里承载相对独立、适合部署到 Serverless 的轻量后端能力，例如官网接口、飞书机器人、飞书多维表格读写、AI 相关接口等。
 现有模块：
 
-| 模块 | 接口 | 说明 |
-| --- | --- | --- |
-| `health` | `GET /health` | 存活探针 |
-| `website` | `POST /contact` | 两个官网的「联系我们」表单 → 飞书多维表格 |
+| 模块 | 接口 |
+| --- | --- |
+| `health` | `GET /health` |
+| `website` | `POST /contact` |
 
 ## 环境要求
 
