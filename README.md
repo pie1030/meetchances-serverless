@@ -30,7 +30,7 @@ uv sync --no-dev
 
 ## 配置环境变量
 
-`POST /contact` 需要飞书凭证。本地开发：
+`POST /contact` 需要飞书凭证，群通知另需机器人 Webhook 地址。本地开发：
 
 ```bash
 cp .env.example .env   # 然后填入真实值
@@ -129,15 +129,14 @@ if (!resp.ok) {
 | `human-intelligence.xpertiise.com`（仅 https） | 智能知识官网（测试） |
 | `meetchances.com`、`www.` 前缀（http + https） | 一面千识官网 |
 | `testwebsite.meetchances.com`（仅 https） | 一面千识官网（测试） |
-| `localhost:5173`、`localhost:3000` | 未知来源（放行跨域但不伪装成真实线索） |
+| `localhost:5173`、`localhost:3000` | 未知来源（放行跨域但不伪装成真实消息） |
 | 其他 / 不带 Origin | 未知来源（并打 warning 日志） |
 
-测试环境写入独立取值，便于在表格里筛掉测试数据；必填规则与对应正式站共用同一个
-元组对象，不会漂移。
+测试环境用带「（测试）」的独立取值，便于在表格里筛掉测试数据；必填规则与对应正式
+站共用同一个元组，不会漂移。
 
 CORS 白名单与来源映射都从 [app/api/website/sites.py](app/api/website/sites.py) 的
-`SITES` 派生，**加域名只改这一处**。旧实现里两份清单手工维护，只加白名单会让请求
-通过但记成「未知来源」，只加来源映射则浏览器根本发不出请求。
+`SITES` 派生，**加域名只改这一处**。
 
 不使用 `allow_origins=["*"]`：本接口写入共享表格，白名单是必要的。
 
@@ -145,16 +144,38 @@ CORS 白名单与来源映射都从 [app/api/website/sites.py](app/api/website/s
 
 | 请求字段 | 表格列 | 说明 |
 | --- | --- | --- |
-| `name` | 姓名 | |
+| `name` | 姓名 | 表格索引列 |
 | `job_title` | 职位 | 一面千识官网不传，留空即不写该列 |
 | `company` | 公司 | |
 | `contact` | 联系方式 | |
 | `requirement` | 需求说明 | |
 | —（后端判定） | 来源网站 | 由 `Origin` 推出 |
-| — | 编号 | **飞书自动生成**，后端不写 |
-| — | 提交时间 | **飞书自动生成**（创建时间），后端不写 |
+| —（后端生成） | 提交时间 | 毫秒时间戳，北京时间 |
+「提交时间」是普通 DateTime 列，飞书不会自动填，必须由后端写入——如果把它改成
+「创建时间」类型就会变成只读，每次写入都会被拒绝。这两点由
+`tests/test_feishu_live.py` 守着。
 
-可选项为空时省略该键，不写空字符串，避免表格里留下空值。
+### 群通知卡片
+
+写入表格成功后，往飞书群发一张卡片。
+
+卡片内容：标题「官网新联络意向」，副标题是来源网站，正文按 姓名 / 职位 / 公司 /
+联系方式 / 需求说明 逐行显示（未填的行不显示），页脚是提交时间，末尾一个
+「查看记录」按钮直接跳到表格里的那一行。正式站蓝色标题，测试站与未知来源灰色。
+
+发送走[自定义机器人 Webhook](https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot)，
+用卡片 JSON 2.0。几个坑：
+
+- 2.0 里普通文本组件是 `div` + `text`，**没有** `plain_text` 组件。直接拿
+  `{"tag": "plain_text"}` 当元素用，整张卡片会被拒收（`200621`）。
+- `schema` 必须显式声明 `"2.0"`，否则按 1.0 解析。
+- 只有在机器人「安全设置」里开了签名校验才该带 `timestamp`/`sign`，没开却带上
+  会被拒收。被签名的是**空字符串**，密钥是 `timestamp\nsecret`。
+
+发送放在 FastAPI 的后台任务里：响应先返回给前端，多一次飞书调用不拖慢表单提交；
+发送失败只记日志，`POST /contact` 仍返回 200 —— 记录已经写进表格了。
+
+没配 `FEISHU_BOT_WEBHOOK_URL` 就不发通知，表单照常写入。
 
 ## 运行测试
 
@@ -187,6 +208,7 @@ meetchances-serverless/
 ├── app/
 │   ├── main.py                  # 创建 FastAPI app，注册聚合路由与 CORS
 │   ├── feishu.py                # 飞书多维表格客户端（跨模块共享的基础设施）
+│   ├── feishu_bot.py            # 群机器人 Webhook 客户端（跨模块共享）
 │   └── api/
 │       ├── router.py            # 聚合路由：所有业务模块在此挂载
 │       ├── health/              # 健康检查模块
@@ -196,13 +218,15 @@ meetchances-serverless/
 │       └── website/             # 官网模块
 │           ├── router.py        # POST /contact
 │           ├── service.py       # 来源判定、必填校验、字段映射
+│           ├── card.py          # 新消息的群通知卡片
 │           ├── schemas.py       # 请求/响应模型
 │           └── sites.py         # 官网注册表：CORS 白名单与来源映射的唯一来源
 ├── tests/
-│   ├── conftest.py              # 共享 fixture，stub 掉飞书客户端
+│   ├── conftest.py              # 共享 fixture，stub 掉飞书客户端与群机器人
 │   ├── test_health.py
 │   ├── test_contact.py          # POST /contact 的校验、映射、错误处理
 │   ├── test_cors.py             # 跨域与站点注册表守卫
+│   ├── test_notify.py           # 群通知卡片的内容与发送时机
 │   └── test_feishu_live.py      # 真连飞书的字段自检（默认跳过）
 ├── run.sh                       # 火山引擎入口，兼作本地启动
 ├── package.sh                   # 打包函数代码包
@@ -220,6 +244,7 @@ meetchances-serverless/
 | --- | --- |
 | `app/main.py` | 只负责创建 app、注册 `api_router` 与 CORS，不包含任何业务路由 |
 | `app/feishu.py` | 跨模块共享的飞书客户端；表格专属的字段名归各模块自己管 |
+| `app/feishu_bot.py` | 跨模块共享的群机器人客户端；只管把卡片发出去，不管卡片长什么样 |
 | `app/api/router.py` | 唯一的路由注册点，新增模块只需在此 `include_router` 一行 |
 | `<module>/router.py` | HTTP 层：处理路径、入参校验、响应模型，不写业务逻辑 |
 | `<module>/service.py` | 业务层：纯逻辑，不依赖 FastAPI，便于单测和跨模块复用 |

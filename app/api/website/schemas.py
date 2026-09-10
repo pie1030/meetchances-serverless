@@ -2,12 +2,10 @@ from pydantic import BaseModel, Field
 
 
 class ContactRequest(BaseModel):
-    """Contact form submission.
+    """联系表单提交内容。
 
-    Every field is optional here and only length-constrained; which ones are
-    actually required depends on the originating site (see service.missing_required).
-    「来源网站」 is resolved from request headers, never accepted from the client,
-    so it cannot be forged.
+    这里所有字段都可选、只限长度，具体哪些必填取决于来源站点，见
+    service.missing_required。「来源网站」由请求头判定，不接受前端传入。
     """
 
     name: str | None = Field(default=None, max_length=100, description="姓名")

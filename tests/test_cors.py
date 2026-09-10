@@ -1,7 +1,7 @@
-"""CORS behaviour and the site registry guards.
+"""CORS 行为，以及站点注册表的守卫测试。
 
-Preflight matters as much as the POST itself: if OPTIONS is not cleared, the
-browser never sends the actual request, so the form silently fails on the site.
+预检和 POST 一样重要：OPTIONS 不放行，浏览器根本不会发真正的请求，表单会在页面
+上静默失败。
 """
 
 from __future__ import annotations
@@ -51,11 +51,7 @@ def test_wildcard_origin_never_allowed() -> None:
 
 
 def test_every_site_host_is_in_the_cors_allowlist() -> None:
-    """来源映射与 CORS 白名单同源派生，此处守住派生逻辑本身。
-
-    旧实现里两份清单手工维护：只加白名单会让请求通过但记成「未知来源」，
-    只加来源映射则浏览器根本发不出请求。
-    """
+    """守住 SITES 到白名单的派生：漏一处会让请求记成「未知来源」或发不出去。"""
     for site in SITES:
         for host in site.hosts:
             for scheme in site.schemes:

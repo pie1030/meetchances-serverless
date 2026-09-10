@@ -7,8 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.api.website.sites import ALLOWED_ORIGINS
 
-# Local development reads credentials from .env; deployed environments inject
-# them as real environment variables, which load_dotenv leaves untouched.
+# 本地开发从 .env 读凭证；线上由平台注入真实环境变量，load_dotenv 不会覆盖。
 load_dotenv()
 
 logging.basicConfig(
@@ -19,9 +18,8 @@ logging.basicConfig(
 def create_app() -> FastAPI:
     app = FastAPI(title="MeetChances Serverless")
 
-    # Explicit allowlist, never "*": these endpoints write to shared Feishu
-    # tables. Adding a site means adding it to app/api/website/sites.py, which
-    # feeds this list and the source mapping at once.
+    # 显式白名单，绝不用 "*"：这些接口会写共享的飞书表格。加站点只改
+    # app/api/website/sites.py，那里同时喂给这个白名单和来源判定。
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(ALLOWED_ORIGINS),

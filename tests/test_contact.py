@@ -1,4 +1,4 @@
-"""Tests for POST /contact."""
+"""POST /contact 的测试。"""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def test_hi_full_submission_written(api: TestClient, stub: StubFeishuClient) -> 
 
 
 def test_no_serial_column_is_written(api: TestClient, stub: StubFeishuClient) -> None:
-    """表格没有「编号」列，写入它会让整条记录失败。"""
+    """表格没有「编号」列，写它会让整条记录失败。"""
     post(api, HI, FULL_HI)
 
     assert "编号" not in stub.calls[0]
@@ -56,14 +56,14 @@ def test_no_serial_column_is_written(api: TestClient, stub: StubFeishuClient) ->
 def test_submitted_at_is_written_as_epoch_millis(
     api: TestClient, stub: StubFeishuClient
 ) -> None:
-    """「提交时间」是普通 DateTime 列，飞书不会自动填，必须由后端写入。"""
+    """「提交时间」是普通 DateTime 列，飞书不会自动填。"""
     before = int(time.time() * 1000)
     post(api, HI, FULL_HI)
     after = int(time.time() * 1000)
 
     written = stub.calls[0]["提交时间"]
     assert isinstance(written, int)
-    # Milliseconds, not seconds: a seconds value would land in 1970.
+    # 必须是毫秒：秒级时间戳会落到 1970 年。
     assert before <= written <= after
 
 
@@ -72,7 +72,7 @@ def test_hi_requirement_is_optional(api: TestClient, stub: StubFeishuClient) -> 
     resp = post(api, HI, body)
 
     assert resp.status_code == 200, resp.text
-    # Absent optional values must not be written as empty strings.
+    # 没填的可选项不能写成空字符串。
     assert "需求说明" not in stub.calls[0]
 
 
@@ -93,7 +93,7 @@ def test_hi_rejects_missing_required(
 
     assert resp.status_code == 422, f"缺 {label} 应被拒绝，实际 {resp.status_code}"
     assert label in resp.json()["detail"]
-    assert stub.calls == []  # a failed check must not reach Feishu
+    assert stub.calls == []  # 校验没过就不该碰飞书
 
 
 # ---------------- 一面千识官网：姓名 公司 联系方式 需求说明 必填，无职位 ----------------
@@ -107,7 +107,7 @@ def test_mc_full_submission_written(api: TestClient, stub: StubFeishuClient) -> 
     written = stub.calls[0]
     assert written["姓名"] == "李四"
     assert written["来源网站"] == "一面千识官网"
-    assert "职位" not in written  # this site has no such field
+    assert "职位" not in written  # 该站没有这个字段
 
 
 @pytest.mark.parametrize(
@@ -238,7 +238,7 @@ def test_feishu_api_error_maps_to_502(api: TestClient, stub: StubFeishuClient) -
 
     assert resp.status_code == 502
     assert resp.json()["detail"] == "提交失败，请稍后重试"
-    # Feishu internals must not leak to the caller.
+    # 飞书的错误细节不能漏给调用方。
     assert "code" not in resp.text
     assert "1254005" not in resp.text
 
