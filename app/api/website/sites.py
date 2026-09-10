@@ -23,12 +23,19 @@ class Site(NamedTuple):
     hosts: tuple[str, ...]
     schemes: tuple[str, ...]
     required: tuple[str, ...]
+    # 是否算真实线索。测试站和未知来源为 False，群通知卡片据此降为灰色标题，
+    # 不靠匹配 source 里的「（测试）」字样来判断。
+    is_lead: bool = True
 
 
 # 认不出来源的请求未必是恶意的（可能是 curl 或服务端调用），只校验最低限度的
 # 两项，不直接拒绝。不放进 SITES：它没有域名，也不该进 CORS 白名单。
 UNKNOWN_SITE: Final = Site(
-    source="未知来源", hosts=(), schemes=(), required=("name", "contact")
+    source="未知来源",
+    hosts=(),
+    schemes=(),
+    required=("name", "contact"),
+    is_lead=False,
 )
 
 
@@ -55,6 +62,7 @@ SITES: Final[tuple[Site, ...]] = (
         hosts=("human-intelligence.xpertiise.com",),
         schemes=("https",),
         required=_REQUIRED_HI,
+        is_lead=False,
     ),
     Site(
         source="一面千识官网",
@@ -67,6 +75,7 @@ SITES: Final[tuple[Site, ...]] = (
         hosts=("testwebsite.meetchances.com",),
         schemes=("https",),
         required=_REQUIRED_MC,
+        is_lead=False,
     ),
 )
 

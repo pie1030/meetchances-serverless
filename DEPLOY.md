@@ -54,9 +54,15 @@ x86_64 运行时崩溃。
 | `FEISHU_APP_SECRET` | 同上。**只在控制台配置，不入代码包、不进 Git** |
 | `FEISHU_APP_TOKEN` | 目标多维表格的 app_token |
 | `FEISHU_TABLE_ID` | 目标数据表的 table_id |
+| `FEISHU_BOT_WEBHOOK_URL` | 通知群的自定义机器人 Webhook。**等同凭证，同样只在控制台配置** |
+| `FEISHU_BITABLE_VIEW_URL` | 可选。卡片上「查看记录」按钮的跳转地址，填表格视图 URL 原样即可 |
 
 `FEISHU_APP_TOKEN` / `FEISHU_TABLE_ID` 取值见表格 URL：
 `/base/<FEISHU_APP_TOKEN>?table=<FEISHU_TABLE_ID>`。
+
+不配 `FEISHU_BOT_WEBHOOK_URL` 时不发群通知，表单照常写入表格。机器人若在「安全
+设置」里开了签名校验，另需 `FEISHU_BOT_WEBHOOK_SECRET`；没开就别配，带上签名反而
+会被拒收。
 
 可选 `FEISHU_BASE_URL`，仅私有化部署需要。
 
@@ -108,8 +114,6 @@ curl -sD- -o /dev/null -X OPTIONS $BASE/contact \
   -H "Origin: https://evil.example.com" \
   -H "Access-Control-Request-Method: POST" | grep -i access-control-allow-origin
 ```
-
-验证完记得删掉表格里的「验证-勿删」记录。
 
 ## 四、切换官网前端
 

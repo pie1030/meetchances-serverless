@@ -25,6 +25,14 @@ FIELD_SUBMITTED_AT: Final = "提交时间"
 CST: Final = timezone(timedelta(hours=8))
 
 
+def now() -> datetime:
+    """当前北京时间。
+
+    路由取一次传给 build_fields 和群通知卡片，两处显示的「提交时间」才一致。
+    """
+    return datetime.now(CST)
+
+
 def resolve_site(origin: str | None, referer: str | None) -> Site:
     """从请求头判断提交来源。
 
@@ -59,9 +67,9 @@ def build_fields(
 ) -> dict[str, Any]:
     """把表单值映射成飞书 records 接口的 fields。
 
-    submitted_at 只为测试固定时间用，调用方不传即取当前时间。
+    submitted_at 由路由传入，同一时刻也用于群通知卡片；不传即取当前时间。
     """
-    moment = submitted_at or datetime.now(CST)
+    moment = submitted_at or now()
     fields: dict[str, Any] = {
         FIELD_NAME: values["name"] or "",
         FIELD_CONTACT: values["contact"] or "",

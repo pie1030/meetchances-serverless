@@ -11,11 +11,13 @@ from functools import lru_cache
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
 from app.api.website import service
+from app.api.website.card import build_lead_card
 from app.api.website.schemas import ContactRequest, ContactResponse
 from app.feishu import FeishuAPIError, FeishuBitableClient, FeishuConfigError
+from app.feishu_bot import FeishuWebhookBot
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +43,21 @@ def get_feishu_client() -> FeishuBitableClient:
         raise HTTPException(status_code=503, detail="服务暂不可用") from exc
 
 
+@lru_cache(maxsize=1)
+def get_bot() -> FeishuWebhookBot | None:
+    """群机器人，没配 Webhook 地址就是 None。
+
+    和表格客户端不同，这里不抛 503：群通知发不出去不影响表单已经写进表格。
+    """
+    return FeishuWebhookBot.from_env()
+
+
 @router.post("/contact", response_model=ContactResponse, summary="提交联系我们表单")
 async def create_contact(
     payload: ContactRequest,
+    background: BackgroundTasks,
     client: Annotated[FeishuBitableClient, Depends(get_feishu_client)],
+    bot: Annotated[FeishuWebhookBot | None, Depends(get_bot)],
     origin: Annotated[str | None, Header()] = None,
     referer: Annotated[str | None, Header()] = None,
 ) -> ContactResponse:
@@ -55,7 +68,8 @@ async def create_contact(
     if missing:
         raise HTTPException(status_code=422, detail=f"缺少必填项：{'、'.join(missing)}")
 
-    fields = service.build_fields(values, site.source)
+    submitted_at = service.now()
+    fields = service.build_fields(values, site.source, submitted_at=submitted_at)
     try:
         record_id = await client.create_record(fields)
     except FeishuAPIError as exc:
@@ -68,4 +82,12 @@ async def create_contact(
         raise HTTPException(status_code=504, detail="提交超时，请稍后重试") from exc
 
     logger.info("表单已写入 record_id=%s source=%s", record_id, site.source)
+
+    # 放后台任务：响应先返回给前端，多一次飞书调用不拖慢提交，发失败也只记日志。
+    if bot is not None:
+        background.add_task(
+            bot.try_send_card,
+            build_lead_card(values, site, submitted_at, record_id),
+        )
+
     return ContactResponse(ok=True, record_id=record_id, source=site.source)
