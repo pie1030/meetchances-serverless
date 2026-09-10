@@ -2,6 +2,6 @@ from pydantic import BaseModel
 
 
 class HealthStatus(BaseModel):
-    """Response contract for the health check endpoint."""
+    """健康检查接口的响应契约。"""
 
     status: str

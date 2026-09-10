@@ -54,17 +54,16 @@ x86_64 运行时崩溃。
 | `FEISHU_APP_SECRET` | 同上。**只在控制台配置，不入代码包、不进 Git** |
 | `FEISHU_APP_TOKEN` | 目标多维表格的 app_token |
 | `FEISHU_TABLE_ID` | 目标数据表的 table_id |
-| `FEISHU_BOT_WEBHOOK_URL` | 通知群的自定义机器人 Webhook。**等同凭证，同样只在控制台配置** |
+| `FEISHU_BOT_WEBHOOK_URL` | 可选。通知群的自定义机器人 Webhook。**等同凭证，同样只在控制台配置** |
+| `FEISHU_BOT_WEBHOOK_SECRET` | 可选。仅当机器人「安全设置」里开了签名校验时才配；没开却配上，请求反而会被拒收 |
 | `FEISHU_BITABLE_VIEW_URL` | 可选。卡片上「查看记录」按钮的跳转地址，填表格视图 URL 原样即可 |
+| `FEISHU_BASE_URL` | 可选。飞书开放平台域名，默认 `https://open.feishu.cn`，仅私有化部署需要 |
 
 `FEISHU_APP_TOKEN` / `FEISHU_TABLE_ID` 取值见表格 URL：
 `/base/<FEISHU_APP_TOKEN>?table=<FEISHU_TABLE_ID>`。
 
-不配 `FEISHU_BOT_WEBHOOK_URL` 时不发群通知，表单照常写入表格。机器人若在「安全
-设置」里开了签名校验，另需 `FEISHU_BOT_WEBHOOK_SECRET`；没开就别配，带上签名反而
-会被拒收。
-
-可选 `FEISHU_BASE_URL`，仅私有化部署需要。
+前四个是必需的，缺任意一个 `POST /contact` 会返回 503（`/health` 不受影响）。标注「可选」
+的四个不配也能正常收表单，只是少掉对应能力：没有 `FEISHU_BOT_WEBHOOK_URL` 就不发群通知。
 
 飞书侧前置条件：应用已开通多维表格读写权限、已发布版本，并被加为目标表格的
 **可编辑**协作者。三者缺一都会在写入时报权限错误。
@@ -115,14 +114,7 @@ curl -sD- -o /dev/null -X OPTIONS $BASE/contact \
   -H "Access-Control-Request-Method: POST" | grep -i access-control-allow-origin
 ```
 
-## 四、切换官网前端
-
-`/contact` 的请求与响应格式和旧服务完全一致，前端只需把 BASE 换成网关地址，字段
-不用改。两个官网调同一个 URL，来源由后端读 `Origin` 判定。
-
-上线顺序：先部署函数并用上面的 curl 验证，再改前端地址，最后下线旧函数。
-
-测试环境（`human-intelligence.xpertiise.com`）要验证的是本地测不到的部分：
-`Origin` 判定成「智能知识官网（测试）」，以及该站真正的必填规则（姓名、职位、
-联系方式、公司）。本地 localhost 会判定成「未知来源」，只校验姓名和联系方式，
-所以必填规则在本地测不出来。
+上面几条覆盖了本地测不到的部分。真实域名的 `Origin` 判定必须在部署后验，本地
+localhost 一律判成「未知来源」、只校验姓名和联系方式，所以各站真正的必填规则在本地
+测不出来。测试环境（`human-intelligence.xpertiise.com`）要确认两件事：`Origin` 判定成
+「智能知识官网（测试）」，以及该站的必填规则（姓名、职位、联系方式、公司）确实生效。
